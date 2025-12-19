@@ -1,0 +1,17 @@
+# Backend API (separate deployment)
+server/
+
+# Python scraper (separate deployment)
+scraper/
+
+# Docker files (not needed for Vercel)
+docker-compose.yml
+Dockerfile
+
+# Documentation
+TECH_STACK.md
+
+# Environment files
+.env
+.env.local
+.env.example
