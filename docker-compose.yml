@@ -1,0 +1,98 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: office-oracle-db
+    environment:
+      POSTGRES_USER: office_oracle
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpassword123}
+      POSTGRES_DB: office_oracle
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U office_oracle"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: office-oracle-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API (Fastify)
+  api:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: office-oracle-api
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://office_oracle:${POSTGRES_PASSWORD:-devpassword123}@postgres:5432/office_oracle
+      REDIS_URL: redis://redis:6379
+      MAPBOX_ACCESS_TOKEN: ${MAPBOX_ACCESS_TOKEN}
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Frontend (Next.js)
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: office-oracle-frontend
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ""
+      NEXT_PUBLIC_BACKEND_URL: http://api:3001
+      NEXT_PUBLIC_MAPBOX_TOKEN: ${MAPBOX_ACCESS_TOKEN}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+  # Scraping Pipeline (Python)
+  scraper:
+    build:
+      context: ./scraper
+      dockerfile: Dockerfile
+    container_name: office-oracle-scraper
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: office_oracle
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpassword123}
+      POSTGRES_DB: office_oracle
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Run on schedule or manually
+    profiles:
+      - scraping
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  default:
+    name: office-oracle-network
